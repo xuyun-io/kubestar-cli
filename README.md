@@ -1,0 +1,2 @@
+# ks
+kubestar deploy cmd
