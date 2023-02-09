@@ -4,6 +4,7 @@
 *.dll
 *.so
 *.dylib
+/kubestar-cli
 
 # Test binary, built with `go test -c`
 *.test
