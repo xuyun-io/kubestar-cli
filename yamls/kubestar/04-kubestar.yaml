@@ -1,0 +1,74 @@
+{{ if .Values.deployKubeStar }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: kubestar
+    type: Deployment
+  name: kubestar
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubestar
+      type: Deployment
+  template:
+    metadata:
+      labels:
+        app: kubestar
+        type: Deployment
+    spec:
+      containers:
+          image: {{ .Values.KubeStarImage }}
+          name: kubestar
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 500m
+              memory: 1G
+            requests:
+              cpu: 100m
+              memory: 400M
+          volumeMounts:
+            - mountPath: /configs/default.yml
+              name: cm-kubestar-kubestar
+              subPath: default.yml
+      volumes:
+        - configMap:
+            defaultMode: 292
+            items:
+              - key: default.yml
+                mode: 292
+                path: default.yml
+            name: kubestar
+          name: cm-kubestar-kubestar
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+  labels:
+    app: kubestar
+    type: Deployment
+  name: kubestar
+  namespace: {{ .Release.Namespace }}
+spec:
+  ports:
+    - name: http
+      nodePort: 31885
+      port: 80
+      protocol: TCP
+      targetPort: 8080
+  selector:
+    app: kubestar
+    type: Deployment
+  sessionAffinity: None
+  type: NodePort
+
+{{end}}
+

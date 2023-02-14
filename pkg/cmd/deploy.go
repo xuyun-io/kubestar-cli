@@ -12,23 +12,33 @@ import (
 	"github.com/xuyun-io/kubestar-cli/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"sort"
+	"strings"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"os"
 )
 
 const (
-	DeploySuccess = "successfulDeploy"
+	DeploySuccess        = "successfulDeploy"
+	DefaultKubestarImage = "michaelpan/kubestar:20220214"
 )
 
 func init() {
 	DeployCmd.Flags().BoolP("check", "c", true, "Check whether the cluster can run KubeStar")
 	DeployCmd.Flags().BoolP("check_only", "", false, "Only run check and exit.")
 	DeployCmd.Flags().StringP("namespace", "n", "kubestar", "The namespace to deploy KubeStar to")
+	DeployCmd.Flags().StringP("yamls", "y", "yamls.tar", "The k8s resources yaml to install")
+	DeployCmd.Flags().StringP("domain", "", "", "The kubestar domain used to access")
+	DeployCmd.Flags().StringP("kubestar_image", "", "", "The kubestar image to deploy")
+
 }
 
 // DeployCmd is the "deploy" command.
-
 var DeployCmd = &cobra.Command{
 	Use:   "deploy",
 	Short: "Deploys KubeStar on the current K8s cluster",
@@ -36,6 +46,9 @@ var DeployCmd = &cobra.Command{
 		viper.BindPFlag("check", cmd.Flags().Lookup("check"))
 		viper.BindPFlag("check_only", cmd.Flags().Lookup("check_only"))
 		viper.BindPFlag("namespace", cmd.Flags().Lookup("namespace"))
+		viper.BindPFlag("yamls", cmd.Flags().Lookup("yamls"))
+		viper.BindPFlag("domain", cmd.Flags().Lookup("domain"))
+		viper.BindPFlag("kubestar_image", cmd.Flags().Lookup("kubestar_image"))
 	},
 	PostRun: func(cmd *cobra.Command, args []string) {
 		if cmd.Annotations["status"] != DeploySuccess {
@@ -61,7 +74,13 @@ var DeployCmd = &cobra.Command{
 func runDeployCmd(cmd *cobra.Command, args []string) {
 	check, _ := cmd.Flags().GetBool("check")
 	checkOnly, _ := cmd.Flags().GetBool("check_only")
-	//namespace, _ := cmd.Flags().GetString("namespace")
+	namespace, _ := cmd.Flags().GetString("namespace")
+	yamls, _ := cmd.Flags().GetString("yamls")
+	domain, _ := cmd.Flags().GetString("domain")
+	kubestarImage, _ := cmd.Flags().GetString("kubestar_image")
+	if len(kubestarImage) == 0 {
+		kubestarImage = DefaultKubestarImage
+	}
 
 	if check || checkOnly {
 		err := utils.RunDefaultClusterChecks()
@@ -81,7 +100,6 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 	clusterName, _ := cmd.Flags().GetString("cluster_name")
 	if clusterName == "" {
 		clusterName = kubeAPIConfig.CurrentContext
-
 	}
 
 	currentCluster := kubeAPIConfig.CurrentContext
@@ -92,37 +110,127 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	numNodes, err := getNumNodes(clientset)
+	okNodes, err := getOKNodes(clientset)
 	if err != nil {
 		utils.Error(err.Error())
 	}
-	if numNodes == 0 {
+	if len(okNodes) == 0 {
 		utils.Error("Cluster has no nodes. Try deploying KubeStar to a cluster with at least one node.")
 		return
 	}
 
-	utils.Infof("Found %v nodes", numNodes)
+	utils.Infof("Found %v nodes", len(okNodes))
+	utils.Info("Please choose one node to deploy MYSQL database: ")
+	var chooseMySqlNode string
+	if chooseMySqlNode = components.ChooseOne(okNodes); len(chooseMySqlNode) == 0 {
+		utils.Fatalf("You must choose one node.")
+		return
+	}
+	utils.Infof("Node %s choosed.\n", chooseMySqlNode)
+
+	// Fill in template values.
+	tmplArgs := &utils.YAMLTmplArguments{
+		Values: &map[string]interface{}{
+			"deployKubeStar": true,
+			"KubeStarImage":  kubestarImage,
+		},
+		Release: &map[string]interface{}{
+			"Namespace":     namespace,
+			"Domain":        domain,
+			"MySQLNodeName": chooseMySqlNode,
+		},
+	}
+
+	utils.Infof("Starting to load %s yaml resources", yamls)
+	yamlData, err := utils.LoadTemplateYAMLs(yamls)
+	if err != nil {
+		utils.Errorf("Load %s yaml resources failed %w", yamls, err)
+		return
+	}
+
+	utils.Infof("Starting to prepare %s yaml resources", yamls)
+	okYAMLs, err := utils.ExecuteTemplatedYAMLs(yamlData, tmplArgs)
+	if err != nil {
+		utils.Errorf("Prepare %s yaml resources failed %w", yamls, err)
+		return
+	}
+
+	if len(okYAMLs) == 0 {
+		utils.Info("Found 0 yamls to install")
+		return
+	}
+
+	for _, item := range okYAMLs {
+		fmt.Printf("%v\n", item)
+	}
+	//olmCRDJob := newTaskWrapper("Installing KubeStar Server", func() error {
+	//	return retryDeploy(clientset, kubeConfig, yamlMap["olm_crd"])
+	//})
 
 }
 
-func getNumNodes(clientset *kubernetes.Clientset) (int, error) {
+func getOKNodes(clientset *kubernetes.Clientset) ([]string, error) {
 	nodes, err := clientset.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
 	if err != nil {
-		return 0, err
+		return []string{}, err
 	}
-	unscheduleableNodes := 0
+	var nodeNames []string
 	for _, n := range nodes.Items {
-		for _, t := range n.Spec.Taints {
-			if !pemCanScheduleWithTaint(&t) {
-				unscheduleableNodes++
-				break
-			}
+		if pemCanScheduleWithTaint(n) {
+			nodeNames = append(nodeNames, n.GetName())
 		}
 	}
-	return len(nodes.Items) - unscheduleableNodes, nil
+	sort.Strings(nodeNames)
+	return nodeNames, nil
 }
 
-func pemCanScheduleWithTaint(t *v1.Taint) bool {
+func pemCanScheduleWithTaint(n v1.Node) bool {
+	for _, t := range n.Spec.Taints {
+		if t.Effect == "NoSchedule" {
+			return false
+		}
+	}
 	// For now an effect of NoSchedule should be sufficient, we don't have tolerations in the Daemonset spec.
-	return t.Effect != "NoSchedule"
+	return true
+}
+
+type taskWrapper struct {
+	name string
+	run  func() error
+}
+
+func newTaskWrapper(name string, run func() error) *taskWrapper {
+	return &taskWrapper{
+		name,
+		run,
+	}
+}
+
+func (t *taskWrapper) Name() string {
+	return t.name
+}
+
+func (t *taskWrapper) Run() error {
+	return t.run()
+}
+
+func retryDeploy(clientset *kubernetes.Clientset, config *rest.Config, yamlContents string) error {
+	tries := 12
+	var err error
+	for tries > 0 {
+		err = k8s.ApplyYAML(clientset, config, "", strings.NewReader(yamlContents), false)
+		if err == nil {
+			return nil
+		}
+
+		if err != nil && k8serrors.IsAlreadyExists(err) {
+			return nil
+		}
+		time.Sleep(5 * time.Second)
+		tries--
+	}
+	if tries == 0 {
+		return err
+	}
+	return nil
 }

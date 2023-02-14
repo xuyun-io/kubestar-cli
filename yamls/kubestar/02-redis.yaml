@@ -1,0 +1,62 @@
+{{ if .Values.deployKubeStar }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+  labels:
+    app: kubestar-redis
+    type: Deployment
+  name: redis
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubestar-redis
+      type: Deployment
+  strategy:
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: kubestar-redis
+        type: Deployment
+    spec:
+      containers:
+        - image: docker.io/redis:3.2.7
+          name: redis
+          ports:
+            - containerPort: 6379
+              name: port1
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 200m
+              memory: 100M
+            requests:
+              cpu: 20m
+              memory: 50M
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+  labels:
+    app: kubestar-redis
+    type: Deployment
+  name: kubestar-redis
+  namespace: {{ .Release.Namespace }}
+spec:
+  ports:
+    - name: port1
+      port: 6379
+      protocol: TCP
+      targetPort: 6379
+  selector:
+    app: kubestar-redis
+    type: Deployment
+  type: ClusterIP
+
+{{end}}

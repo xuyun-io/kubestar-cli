@@ -84,3 +84,7 @@ func YNPrompt(message string, defaultValue bool) bool {
 	}
 	return strings.ToLower(NewPrompter(message, []string{"y", "n"}, defaultChoice).Prompt()) == "y"
 }
+
+func ChooseOne(choice []string) string {
+	return NewPrompter("Choose one node to install MySQL", choice, choice[0]).Prompt()
+}
