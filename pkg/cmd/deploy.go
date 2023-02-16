@@ -24,8 +24,7 @@ import (
 )
 
 const (
-	DeploySuccess        = "successfulDeploy"
-	DefaultKubestarImage = "michaelpan/kubestar:20220214"
+	DeploySuccess = "successfulDeploy"
 )
 
 func init() {
@@ -34,7 +33,8 @@ func init() {
 	DeployCmd.Flags().StringP("namespace", "n", "kubestar", "The namespace to deploy KubeStar to")
 	DeployCmd.Flags().StringP("yamls", "y", "yamls.tar", "The k8s resources yaml to install")
 	DeployCmd.Flags().StringP("domain", "", "", "The kubestar domain used to access")
-	DeployCmd.Flags().StringP("kubestar_image", "", "", "The kubestar image to deploy")
+	DeployCmd.Flags().StringP("kubestar_image", "", "michaelpan/kubestar:20220214", "The kubestar image to deploy")
+	DeployCmd.Flags().BoolP("monitor_only", "", false, "Only deploy monitor components")
 
 }
 
@@ -49,6 +49,7 @@ var DeployCmd = &cobra.Command{
 		viper.BindPFlag("yamls", cmd.Flags().Lookup("yamls"))
 		viper.BindPFlag("domain", cmd.Flags().Lookup("domain"))
 		viper.BindPFlag("kubestar_image", cmd.Flags().Lookup("kubestar_image"))
+		viper.BindPFlag("monitor_only", cmd.Flags().Lookup("monitor_only"))
 	},
 	PostRun: func(cmd *cobra.Command, args []string) {
 		if cmd.Annotations["status"] != DeploySuccess {
@@ -78,9 +79,7 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 	yamls, _ := cmd.Flags().GetString("yamls")
 	domain, _ := cmd.Flags().GetString("domain")
 	kubestarImage, _ := cmd.Flags().GetString("kubestar_image")
-	if len(kubestarImage) == 0 {
-		kubestarImage = DefaultKubestarImage
-	}
+	monitorOnly, _ := cmd.Flags().GetBool("monitor_only")
 
 	if check || checkOnly {
 		err := utils.RunDefaultClusterChecks()
@@ -119,19 +118,23 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	utils.Infof("Found %v nodes", len(okNodes))
-	utils.Info("Please choose one node to deploy MYSQL database: ")
 	var chooseMySqlNode string
-	if chooseMySqlNode = components.ChooseOne(okNodes); len(chooseMySqlNode) == 0 {
-		utils.Fatalf("You must choose one node.")
-		return
+
+	utils.Infof("Found %v nodes", len(okNodes))
+	if !monitorOnly {
+		utils.Info("Please choose one node to deploy mysql: ")
+		if chooseMySqlNode = components.ChooseOne(okNodes); len(chooseMySqlNode) == 0 {
+			utils.Fatalf("You must choose one node.")
+			return
+		}
+		utils.Infof("Node %s choosed.\n", chooseMySqlNode)
 	}
-	utils.Infof("Node %s choosed.\n", chooseMySqlNode)
 
 	// Fill in template values.
 	tmplArgs := &utils.YAMLTmplArguments{
 		Values: &map[string]interface{}{
-			"deployKubeStar": true,
+			"deployKubeStar": !monitorOnly,
+			"deployMonitor":  monitorOnly,
 			"KubeStarImage":  kubestarImage,
 		},
 		Release: &map[string]interface{}{
@@ -160,13 +163,35 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	for _, item := range okYAMLs {
-		fmt.Printf("%v\n", item)
+	if err := deploy(okYAMLs, monitorOnly, clientset, kubeConfig); err != nil {
+		utils.Errorf("Deploy kubeStar resource failed with error %w", yamls, err)
+		os.Exit(1)
 	}
-	//olmCRDJob := newTaskWrapper("Installing KubeStar Server", func() error {
-	//	return retryDeploy(clientset, kubeConfig, yamlMap["olm_crd"])
-	//})
+}
 
+func deploy(yamls []*utils.YAMLFile, monitorOnly bool, clientset *kubernetes.Clientset, kubeConfig *rest.Config) error {
+	var targets []*utils.YAMLFile
+	for _, item := range yamls {
+		if monitorOnly {
+			if item.Dir == "kubestar-monitor" {
+				targets = append(targets, item)
+			}
+		} else {
+			if item.Dir == "kubestar" {
+				targets = append(targets, item)
+			}
+		}
+	}
+
+	for _, item := range targets {
+		utils.Infof("Deploying %s\n", item.Name)
+		if err := retryDeploy(clientset, kubeConfig, item.YAML); err != nil {
+			utils.Errorf("Deploy %s failed with error %w\n", err)
+			return err
+		}
+	}
+
+	return nil
 }
 
 func getOKNodes(clientset *kubernetes.Clientset) ([]string, error) {

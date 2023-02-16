@@ -46,7 +46,7 @@ func LoadTemplateYAMLs(tar string) ([]*YAMLFile, error) {
 
 	// Write to YAMLFile slice.
 	var yamlFiles []*YAMLFile
-	re := regexp.MustCompile(`((?:[0-9]+_)|(?:kubestar))(.*)(?:\.yaml)`)
+	re := regexp.MustCompile(`((?:[0-9]+_)|(?:kubestar-monitor)|(?:kubestar))(.*)(?:\.yaml)`)
 	for _, fName := range yamlNames {
 		// The filename looks like "./pixie_yamls/00_namespace.yaml" or "./pixie_yamls/crds/vizier_crd.yaml", we want to extract the "namespace".
 		ms := re.FindStringSubmatch(fName)
@@ -73,7 +73,7 @@ func ExecuteTemplatedYAMLs(yamls []*YAMLFile, tmplValues *YAMLTmplArguments) ([]
 			Name: y.Name,
 		}
 
-		if tmplValues == nil {
+		if tmplValues == nil || strings.Contains(y.Name, "prometheus-configmap") {
 			yamlFile.YAML = y.YAML
 		} else {
 			executedYAML, err := executeTemplate(tmplValues, y.YAML)

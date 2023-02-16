@@ -86,5 +86,5 @@ func YNPrompt(message string, defaultValue bool) bool {
 }
 
 func ChooseOne(choice []string) string {
-	return NewPrompter("Choose one node to install MySQL", choice, choice[0]).Prompt()
+	return NewPrompter("Choose one node to install ", choice, choice[0]).Prompt()
 }
