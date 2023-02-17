@@ -1,39 +1,40 @@
 {{ if .Values.deployKubeStar }}
-apiVersion: v1
-data:
-  default.yml: |
-  loglevel: TRACE
-  alert: true
-  audit: true
-  monitoring: true
-  sendMail: false
-  mysql:
-    database: kubestar
-    host: kubestar-mysql.{{ .Release.Namespace }}:3306
-    user: kubestar
-    pass: 123456
-  redis:
-    host: kubestar-redis:6379
-    maxIdle: 1
-    maxActive: 10
-    idleTimeout: 30
-  cache: false
-  ui: true
-  activateLink: http://{{ .Release.Domain }}
-  verifyLink: http://{{ .Release.Domain }}
-  resetLink: http://{{ .Release.Domain }}
-  deployMode: server
-  mfa: false
-  auditType: MySQL
-  auditWriteOnly: true
-  externalIAMHost: https://console.marshotspot.com
-  controllers:
-    audits:
-      sleepSeconds: 180
 kind: ConfigMap
+apiVersion: v1
 metadata:
   annotations:
     app: kubestar
   name: kubestar
   namespace: {{ .Release.Namespace }}
+data:
+  default.yml: |
+    loglevel: TRACE
+    alert: true
+    audit: true
+    monitoring: true
+    sendMail: false
+    mysql:
+      database: kubestar
+      host: kubestar-mysql.{{ .Release.Namespace }}:3306
+      user: root
+      pass: 123456
+    redis:
+      host: kubestar-redis:6379
+      maxIdle: 1
+      maxActive: 10
+      idleTimeout: 30
+    cache: false
+    ui: true
+    activateLink: http://{{ .Release.Domain }}
+    verifyLink: http://{{ .Release.Domain }}
+    resetLink: http://{{ .Release.Domain }}
+    deployMode: server
+    mfa: false
+    auditType: MySQL
+    auditWriteOnly: true
+    externalIAMHost: https://console.marshotspot.com
+    controllers:
+      audits:
+        sleepSeconds: 180
+
 {{end}}

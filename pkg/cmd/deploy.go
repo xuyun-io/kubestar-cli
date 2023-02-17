@@ -240,6 +240,7 @@ func (t *taskWrapper) Run() error {
 }
 
 func retryDeploy(clientset *kubernetes.Clientset, config *rest.Config, yamlContents string) error {
+	fmt.Println(yamlContents)
 	tries := 12
 	var err error
 	for tries > 0 {
@@ -253,6 +254,7 @@ func retryDeploy(clientset *kubernetes.Clientset, config *rest.Config, yamlConte
 		}
 		time.Sleep(5 * time.Second)
 		tries--
+		fmt.Printf("-----------> %w\n", err)
 	}
 	if tries == 0 {
 		return err

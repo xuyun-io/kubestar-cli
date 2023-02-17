@@ -20,6 +20,7 @@ spec:
         type: Deployment
     spec:
       containers:
+        -
           image: {{ .Values.KubeStarImage }}
           name: kubestar
           ports:
