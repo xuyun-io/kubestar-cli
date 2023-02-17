@@ -1,3 +1,4 @@
+{{ if .Values.deployMonitor }}
 apiVersion: v1
 data:
   base-alerting-rule.yml: |
@@ -10,7 +11,8 @@ data:
     global:
       scrape_interval:     1m
       evaluation_interval: 15s
-
+      external_labels:
+        cluster: {{ .Release.Cluster }}
     scrape_configs:
     - job_name: prometheus-server
       honor_labels: false
@@ -312,3 +314,4 @@ metadata:
     app: prometheus-server
   name: prometheus-config
   namespace: kubestar-monitor
+{{ end }}

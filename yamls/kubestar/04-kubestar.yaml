@@ -61,7 +61,6 @@ metadata:
 spec:
   ports:
     - name: http
-      nodePort: 31885
       port: 80
       protocol: TCP
       targetPort: 8080

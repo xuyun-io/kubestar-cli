@@ -96,13 +96,8 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 	kubeAPIConfig := k8s.GetClientAPIConfig()
 	clientset := k8s.GetClientset(kubeConfig)
 
-	clusterName, _ := cmd.Flags().GetString("cluster_name")
-	if clusterName == "" {
-		clusterName = kubeAPIConfig.CurrentContext
-	}
-
 	currentCluster := kubeAPIConfig.CurrentContext
-	utils.Infof("Deploying KubeStar to the following cluster: %s", currentCluster)
+	utils.Infof("Deploying KubeStar to the following cluster: %s", getClusterShortName(currentCluster))
 	clusterOk := components.YNPrompt("Is the cluster correct?", true)
 	if !clusterOk {
 		utils.Error("Cluster is not correct. Aborting.")
@@ -141,6 +136,7 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 			"Namespace":     namespace,
 			"Domain":        domain,
 			"MySQLNodeName": chooseMySqlNode,
+			"Cluster":       getClusterShortName(currentCluster),
 		},
 	}
 
@@ -167,6 +163,7 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 		utils.Errorf("Deploy kubeStar resource failed with error %w", yamls, err)
 		os.Exit(1)
 	}
+	utils.Infof("Deploy success on current cluster %s\n", currentCluster)
 }
 
 func deploy(yamls []*utils.YAMLFile, monitorOnly bool, clientset *kubernetes.Clientset, kubeConfig *rest.Config) error {
@@ -219,26 +216,6 @@ func pemCanScheduleWithTaint(n v1.Node) bool {
 	return true
 }
 
-type taskWrapper struct {
-	name string
-	run  func() error
-}
-
-func newTaskWrapper(name string, run func() error) *taskWrapper {
-	return &taskWrapper{
-		name,
-		run,
-	}
-}
-
-func (t *taskWrapper) Name() string {
-	return t.name
-}
-
-func (t *taskWrapper) Run() error {
-	return t.run()
-}
-
 func retryDeploy(clientset *kubernetes.Clientset, config *rest.Config, yamlContents string) error {
 	fmt.Println(yamlContents)
 	tries := 12
@@ -254,10 +231,19 @@ func retryDeploy(clientset *kubernetes.Clientset, config *rest.Config, yamlConte
 		}
 		time.Sleep(5 * time.Second)
 		tries--
-		fmt.Printf("-----------> %w\n", err)
 	}
 	if tries == 0 {
 		return err
 	}
 	return nil
+}
+
+func getClusterShortName(fullName string) string {
+	i := strings.LastIndex(fullName, "/")
+	if i == len(fullName)-1 {
+		return fullName
+	}
+
+	return fullName[i+1:]
+
 }

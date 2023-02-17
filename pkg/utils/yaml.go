@@ -73,7 +73,7 @@ func ExecuteTemplatedYAMLs(yamls []*YAMLFile, tmplValues *YAMLTmplArguments) ([]
 			Name: y.Name,
 		}
 
-		if tmplValues == nil || strings.Contains(y.Name, "prometheus-configmap") {
+		if tmplValues == nil {
 			yamlFile.YAML = y.YAML
 		} else {
 			executedYAML, err := executeTemplate(tmplValues, y.YAML)

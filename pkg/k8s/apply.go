@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"io"
+	"sync"
 
 	"encoding/json"
 
@@ -40,6 +41,25 @@ func init() {
 
 	// Suppress k8s log output.
 	klog.SetOutput(io.Discard)
+}
+
+var (
+	locker              sync.Mutex
+	globalDynamicClient dynamic.Interface
+)
+
+func GetDynamicClient(config *rest.Config) (dynamic.Interface, error) {
+	locker.Lock()
+	defer locker.Unlock()
+
+	if globalDynamicClient != nil {
+		return globalDynamicClient, nil
+	}
+
+	var err error
+	globalDynamicClient, err = dynamic.NewForConfig(config)
+	return globalDynamicClient, err
+
 }
 
 // ApplyYAML does the equivalent of a kubectl apply for the given yaml. If allowUpdate is true, then we update the resource
@@ -143,7 +163,8 @@ func ApplyResources(clientset kubernetes.Interface, config *rest.Config, resourc
 			Group:   mapping.GroupVersionKind.Group,
 			Version: mapping.GroupVersionKind.Version,
 		}
-		dynamicClient, err := dynamic.NewForConfig(restconfig)
+
+		dynamicClient, err := GetDynamicClient(restconfig)
 		if err != nil {
 			return err
 		}

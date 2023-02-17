@@ -4,6 +4,7 @@ kind: Service
 metadata:
   labels:
     app: node-exporter
+    type: DaemonSet
   name: node-exporter
   namespace: kubestar-monitor
 spec:
@@ -14,22 +15,26 @@ spec:
   type: ClusterIP
   selector:
     app: node-exporter
+    type: DaemonSet
 ---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   labels:
     app: node-exporter
+    type: DaemonSet
   name: node-exporter
   namespace: kubestar-monitor
 spec:
   selector:
     matchLabels:
       app: node-exporter
+      type: DaemonSet
   template:
     metadata:
       labels:
         app: node-exporter
+        type: DaemonSet
     spec:
       containers:
         - args:

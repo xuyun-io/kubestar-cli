@@ -8,6 +8,7 @@ spec:
   selector:
     matchLabels:
       app: kubestar-mysql
+      type: Deployment
   replicas: 1
   template:
     metadata:
