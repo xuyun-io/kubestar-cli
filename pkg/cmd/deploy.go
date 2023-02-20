@@ -33,7 +33,7 @@ func init() {
 	DeployCmd.Flags().StringP("namespace", "n", "kubestar", "The namespace to deploy KubeStar to")
 	DeployCmd.Flags().StringP("yamls", "y", "yamls.tar", "The k8s resources yaml to install")
 	DeployCmd.Flags().StringP("domain", "", "", "The kubestar domain used to access")
-	DeployCmd.Flags().StringP("kubestar_image", "", "michaelpan/kubestar:20220214", "The kubestar image to deploy")
+	DeployCmd.Flags().StringP("kubestar_image", "", "michaelpan/kubestar:20230220", "The kubestar image to deploy")
 	DeployCmd.Flags().BoolP("monitor_only", "", false, "Only deploy monitor components")
 
 }
