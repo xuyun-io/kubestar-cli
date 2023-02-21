@@ -20,3 +20,8 @@ tar cvf yamls.tar yamls
 ```
 ./kubestar-cli deploy -n kubestar --domain qa-kubestar-deploy.nsstest.com
 ```
+
+###Options
+
+####domain
+应用访问域名或IP地址
