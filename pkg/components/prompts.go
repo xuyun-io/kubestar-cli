@@ -85,6 +85,6 @@ func YNPrompt(message string, defaultValue bool) bool {
 	return strings.ToLower(NewPrompter(message, []string{"y", "n"}, defaultChoice).Prompt()) == "y"
 }
 
-func ChooseOne(choice []string) string {
-	return NewPrompter("Choose one node to install ", choice, choice[0]).Prompt()
+func ChooseOne(desc string, choice []string) string {
+	return NewPrompter(desc, choice, "").Prompt()
 }

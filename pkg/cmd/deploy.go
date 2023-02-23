@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"github.com/fatih/color"
 	log "github.com/sirupsen/logrus"
@@ -10,14 +9,10 @@ import (
 	"github.com/xuyun-io/kubestar-cli/pkg/components"
 	"github.com/xuyun-io/kubestar-cli/pkg/k8s"
 	"github.com/xuyun-io/kubestar-cli/pkg/utils"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"sort"
 	"strings"
 	"time"
-
-	v1 "k8s.io/api/core/v1"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"os"
@@ -112,31 +107,48 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 		utils.Error("Cluster has no nodes. Try deploying KubeStar to a cluster with at least one node.")
 		return
 	}
-
-	var chooseMySqlNode string
-
 	utils.Infof("Found %v nodes", len(okNodes))
-	if !monitorOnly {
-		utils.Info("Please choose one node to deploy mysql: ")
-		if chooseMySqlNode = components.ChooseOne(okNodes); len(chooseMySqlNode) == 0 {
+
+	storageClasses, err := ListStorageClass(clientset)
+	if err != nil {
+		utils.Error(err.Error())
+		return
+	}
+
+	deployOpt := deployOptions{MonitorOnly: monitorOnly}
+	if len(storageClasses) > 0 {
+		utils.Infof("Found %d StorageClasses", len(storageClasses))
+		deployOpt.ChooseStorageClassName = components.ChooseOne("Choose one StorageClass or press enter to ignore to install ", storageClasses)
+	}
+
+	if len(deployOpt.ChooseStorageClassName) == 0 && !monitorOnly {
+		c := components.YNPrompt("As no StorageClass are supplied, KubeStar are using a local PV, Are you ok to continue?", true)
+		if !c {
+			utils.Error("No StorageClass exist. Aborting.")
+			return
+		}
+
+		utils.Info("Please choose one node to supply the Local Persistent Volume(/data/kubestar/mysql): ")
+		if deployOpt.ChooseNodeName = components.ChooseOne("Choose one Node to install ", okNodes); len(deployOpt.ChooseNodeName) == 0 {
 			utils.Fatalf("You must choose one node.")
 			return
 		}
-		utils.Infof("Node %s choosed.\n", chooseMySqlNode)
+		utils.Infof("Node %s choosed.\n", deployOpt.ChooseNodeName)
 	}
 
 	// Fill in template values.
 	tmplArgs := &utils.YAMLTmplArguments{
 		Values: &map[string]interface{}{
-			"deployKubeStar": !monitorOnly,
-			"deployMonitor":  monitorOnly,
-			"KubeStarImage":  kubestarImage,
+			"deployKubeStar":   !monitorOnly,
+			"deployMonitor":    monitorOnly,
+			"KubeStarImage":    kubestarImage,
+			"StorageClassName": deployOpt.ChooseStorageClassName,
 		},
 		Release: &map[string]interface{}{
-			"Namespace":     namespace,
-			"Domain":        domain,
-			"MySQLNodeName": chooseMySqlNode,
-			"Cluster":       getClusterShortName(currentCluster),
+			"Namespace":        namespace,
+			"Domain":           domain,
+			"SelectedNodeName": deployOpt.ChooseNodeName,
+			"Cluster":          getClusterShortName(currentCluster),
 		},
 	}
 
@@ -166,6 +178,14 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 	utils.Infof("Deploy success on current cluster %s\n", currentCluster)
 }
 
+type deployOptions struct {
+	MonitorOnly            bool
+	useNodeStorage         bool
+	ChooseStorageClassName string
+
+	ChooseNodeName string
+}
+
 func deploy(yamls []*utils.YAMLFile, monitorOnly bool, clientset *kubernetes.Clientset, kubeConfig *rest.Config) error {
 	var targets []*utils.YAMLFile
 	for _, item := range yamls {
@@ -189,31 +209,6 @@ func deploy(yamls []*utils.YAMLFile, monitorOnly bool, clientset *kubernetes.Cli
 	}
 
 	return nil
-}
-
-func getOKNodes(clientset *kubernetes.Clientset) ([]string, error) {
-	nodes, err := clientset.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
-	if err != nil {
-		return []string{}, err
-	}
-	var nodeNames []string
-	for _, n := range nodes.Items {
-		if pemCanScheduleWithTaint(n) {
-			nodeNames = append(nodeNames, n.GetName())
-		}
-	}
-	sort.Strings(nodeNames)
-	return nodeNames, nil
-}
-
-func pemCanScheduleWithTaint(n v1.Node) bool {
-	for _, t := range n.Spec.Taints {
-		if t.Effect == "NoSchedule" {
-			return false
-		}
-	}
-	// For now an effect of NoSchedule should be sufficient, we don't have tolerations in the Daemonset spec.
-	return true
 }
 
 func retryDeploy(clientset *kubernetes.Clientset, config *rest.Config, yamlContents string) error {

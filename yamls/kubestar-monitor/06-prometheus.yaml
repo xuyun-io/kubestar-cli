@@ -90,7 +90,7 @@ spec:
             - name: cm-prometheus-config
               mountPath: /etc/config
               readOnly: true
-            - name: prometheus-host-volume
+            - name: prometheus-storage-data
               mountPath: /prometheus
         - args:
             - --config.file=/etc/config/prometheus.yml
@@ -149,7 +149,7 @@ spec:
             - name: cm-prometheus-config
               mountPath: /etc/config
               readOnly: true
-            - name: prometheus-host-volume
+            - name: prometheus-storage-data
               mountPath: /prometheus
       securityContext:
         fsGroup: 65534
@@ -159,10 +159,27 @@ spec:
       serviceAccount: kubestar-prometheus-server
       serviceAccountName: kubestar-prometheus-server
       terminationGracePeriodSeconds: 300
+      {{if not (.Values.StorageClassName) }}
+      {{end}}
       volumes:
         - configMap:
             name: prometheus-config
           name: cm-prometheus-config
-        - name: prometheus-host-volume
+        {{if not (.Values.StorageClassName) }}
+        - name: prometheus-storage-data
           emptyDir: {}
+        {{end}}
+  {{if .Values.StorageClassName }}
+  volumeClaimTemplates:
+    - metadata:
+        name: prometheus-storage-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 20Gi
+        storageClassName: {{ .Values.StorageClassName }}
+        volumeMode: Filesystem
+  {{end}}
 {{end}}

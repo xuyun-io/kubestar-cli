@@ -38,14 +38,46 @@ spec:
               value: "kubestar"
           volumeMounts:
             - mountPath: /var/lib/mysql
-              name: mysql-host-volume
-      nodeName: {{ .Release.MySQLNodeName }}
+              name: kubestar-mysql-storage-data
+      {{if .Values.StorageClassName }}
+      securityContext:
+        runAsUser: 1000
+        runAsNonRoot: true
+        fsGroup: 1000
+      {{end}}
+      {{if not (.Values.StorageClassName) }}
+      nodeName: {{ .Release.SelectedNodeName }}
+      {{end}}
       volumes:
-        - name: mysql-host-volume
+        - name: kubestar-mysql-storage-data
+          {{if .Values.StorageClassName }}
+          persistentVolumeClaim:
+            claimName: "kubestar-mysql-pvc"
+          {{end}}
+          {{if not (.Values.StorageClassName) }}
           hostPath:
-            path: /data/kubestar-mysql
+            path: /data/kubestar/mysql
             type: DirectoryOrCreate
+          {{end}}
 
+{{if .Values.StorageClassName }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    app: kubestar-mysql
+    type: Deployment
+  name: kubestar-mysql-pvc
+  namespace: kubestar
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: {{ .Values.StorageClassName }}
+{{end}}
 ---
 
 apiVersion: v1
@@ -67,5 +99,4 @@ spec:
     app: kubestar-mysql
     type: Deployment
   type: ClusterIP
-
 {{end}}
