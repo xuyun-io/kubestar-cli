@@ -12,12 +12,13 @@ import (
 	sv1 "k8s.io/api/storage/v1"
 )
 
-func getOKNodes(clientset *kubernetes.Clientset) ([]string, error) {
+func getOKAndRunTimeNodes(clientset *kubernetes.Clientset) ([]string, string, error) {
 	nodes, err := clientset.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
 	if err != nil {
-		return []string{}, err
+		return []string{}, "", err
 	}
 
+	runtime := nodes.Items[0].Status.NodeInfo.ContainerRuntimeVersion
 	displayNodes(nodes.Items)
 
 	var nodeNames []string
@@ -27,7 +28,7 @@ func getOKNodes(clientset *kubernetes.Clientset) ([]string, error) {
 		}
 	}
 	sort.Strings(nodeNames)
-	return nodeNames, nil
+	return nodeNames, runtime, nil
 }
 
 func pemCanScheduleWithTaint(n v1.Node) bool {
@@ -59,7 +60,7 @@ func ListStorageClass(clientset *kubernetes.Clientset) ([]string, error) {
 // nodeName,cpu, memory, pods
 func displayNodes(l []v1.Node) {
 	w := components.CreateStreamWriter("Nodes ", os.Stdout)
-	w.SetHeader("Node List", []string{"NAME", "CPU", "MEM", "ephemeral-STORAGE", "PODS"})
+	w.SetHeader("Node List", []string{"NAME", "CPU", "MEM", "ephemeral-STORAGE", "PODS", "CONTAINER-RUNTIME"})
 
 	for _, item := range l {
 		w.Write([]interface{}{
@@ -68,6 +69,7 @@ func displayNodes(l []v1.Node) {
 			item.Status.Allocatable.Memory(),
 			item.Status.Allocatable.StorageEphemeral(),
 			item.Status.Allocatable.Pods(),
+			item.Status.NodeInfo.ContainerRuntimeVersion,
 		})
 	}
 

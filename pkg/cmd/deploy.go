@@ -99,7 +99,7 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	okNodes, err := getOKNodes(clientset)
+	okNodes, containerRunTM, err := getOKAndRunTimeNodes(clientset)
 	if err != nil {
 		utils.Error(err.Error())
 	}
@@ -139,10 +139,12 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 	// Fill in template values.
 	tmplArgs := &utils.YAMLTmplArguments{
 		Values: &map[string]interface{}{
-			"deployKubeStar":   !monitorOnly,
-			"deployMonitor":    monitorOnly,
-			"KubeStarImage":    kubestarImage,
-			"StorageClassName": deployOpt.ChooseStorageClassName,
+			"deployKubeStar":             !monitorOnly,
+			"deployMonitor":              monitorOnly,
+			"KubeStarImage":              kubestarImage,
+			"StorageClassName":           deployOpt.ChooseStorageClassName,
+			"ContainerRuntimeContainerd": strings.Contains(containerRunTM, "containerd"),
+			"ContainerRuntimeDocker":     strings.Contains(containerRunTM, "docker"),
 		},
 		Release: &map[string]interface{}{
 			"Namespace":        namespace,
