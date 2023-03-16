@@ -78,20 +78,13 @@ spec:
       automountServiceAccountToken: false
       containers:
         - args:
-            - --housekeeping_interval=10s
-            - --max_housekeeping_interval=15s
             - --event_storage_event_limit=default=0
             - --event_storage_age_limit=default=0
-            - --enable_metrics=tcp
             - --docker_only=true
             - --store_container_labels=false
             - --whitelisted_container_labels=io.kubernetes.container.name,io.kubernetes.pod.name,io.kubernetes.pod.namespace
-          {{if .Values.ContainerRuntimeContainerd }}
-          image: gcr.io/cadvisor/cadvisor:v0.45.0-containerd-cri
-          {{end}}
-          {{if .Values.ContainerRuntimeDocker }}
-          image: gcr.io/cadvisor/cadvisor:v0.45.0
-          {{end}}
+            - --disable_metrics=percpu,sched,udp,disk,diskIO,process
+          image: ccr.ccs.tencentyun.com/mirrors/cadvisor:v0.34.0
           name: cadvisor
           ports:
             - containerPort: 8080
@@ -116,16 +109,9 @@ spec:
             - mountPath: /sys
               name: sys
               readOnly: true
-            {{if .Values.ContainerRuntimeDocker }}
             - mountPath: /var/lib/docker
               name: docker
               readOnly: true
-            {{end}}
-            {{if .Values.ContainerRuntimeContainerd }}
-            - mountPath: /var/lib/containerd
-              name: containerd
-              readOnly: true
-            {{end}}
       serviceAccountName: kubestar-cadvisor
       serviceAccount: kubestar-cadvisor
       terminationGracePeriodSeconds: 30
@@ -142,14 +128,7 @@ spec:
         - hostPath:
             path: /sys
           name: sys
-        {{if .Values.ContainerRuntimeDocker }}
         - hostPath:
             path: /var/lib/docker
           name: docker
-        {{end}}
-        {{if .Values.ContainerRuntimeContainerd }}
-        - hostPath:
-            path: /var/lib/containerd
-          name: containerd
-        {{end}}
 {{end}}
